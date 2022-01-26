@@ -24,7 +24,8 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 #include "Locale.hh"
 #include <GroupsockHelper.hh>
 #include "ourMD5.hh"
-
+#include <string>
+#include <iostream>
 ////////// RTSPClient implementation //////////
 
 RTSPClient* RTSPClient::createNew(UsageEnvironment& env, char const* rtspURL,
@@ -476,6 +477,16 @@ unsigned RTSPClient::sendRequest(RequestRecord* request) {
 			  extraHeaders, extraHeadersWereAllocated)) {
       break;
     }
+
+    if(strncmp("PLAY", request->commandName(), 4) == 0)
+    {
+      std::cerr << "xulong1 PLAY" << std::endl;
+      std::string base_url(fBaseURL);
+      base_url += "?Live_video_channel_mask=0x0000ffff&Live_audio_channel_mask=0x00000001&Live_iframe_only=0&Live_stream_index=0/";
+      play_base_url = base_url;
+      cmdURL = const_cast<char*>(play_base_url.c_str());
+    }
+    std::cerr << "xulong6 " << cmdURL << std::endl;
 
     char const* contentStr = request->contentStr(); // by default
     if (contentStr == NULL) contentStr = "";

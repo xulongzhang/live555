@@ -22,6 +22,7 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 
 #include "liveMedia.hh"
 #include "BasicUsageEnvironment.hh"
+#include <iostream>
 
 // Forward function definitions:
 
@@ -162,6 +163,9 @@ private:
   u_int8_t* fReceiveBuffer;
   MediaSubsession& fSubsession;
   char* fStreamId;
+  int64_t frame_counter_{0};
+  FILE* raw_es_writer_{nullptr};
+  bool received_sps_pps_{false};
 };
 
 #define RTSP_CLIENT_VERBOSITY_LEVEL 1 // by default, print verbose output from each "RTSPClient"
@@ -227,7 +231,7 @@ void continueAfterDESCRIBE(RTSPClient* rtspClient, int resultCode, char* resultS
 
 // By default, we request that the server stream its data using RTP/UDP.
 // If, instead, you want to request that the server stream via RTP-over-TCP, change the following to True:
-#define REQUEST_STREAMING_OVER_TCP False
+#define REQUEST_STREAMING_OVER_TCP True
 
 void setupNextSubsession(RTSPClient* rtspClient) {
   UsageEnvironment& env = rtspClient->envir(); // alias
@@ -487,11 +491,14 @@ DummySink::DummySink(UsageEnvironment& env, MediaSubsession& subsession, char co
     fSubsession(subsession) {
   fStreamId = strDup(streamId);
   fReceiveBuffer = new u_int8_t[DUMMY_SINK_RECEIVE_BUFFER_SIZE];
+  raw_es_writer_ = fopen("ganz.h264", "wb");
 }
 
 DummySink::~DummySink() {
   delete[] fReceiveBuffer;
   delete[] fStreamId;
+  fclose(raw_es_writer_);
+  raw_es_writer_ = nullptr;
 }
 
 void DummySink::afterGettingFrame(void* clientData, unsigned frameSize, unsigned numTruncatedBytes,
@@ -506,6 +513,44 @@ void DummySink::afterGettingFrame(void* clientData, unsigned frameSize, unsigned
 void DummySink::afterGettingFrame(unsigned frameSize, unsigned numTruncatedBytes,
 				  struct timeval presentationTime, unsigned /*durationInMicroseconds*/) {
   // We've just received a frame of data.  (Optionally) print out information about it:
+
+  if (received_sps_pps_ == false)
+  {
+    std::cerr << "xulong1 dummysink first frame" << std::endl;
+    unsigned int num = 2;
+    SPropRecord *sps = parseSPropParameterSets(fSubsession.fmtp_spropparametersets(), num);
+
+    // For H.264 video stream, we use a special sink that insert start_codes:
+    unsigned char start_code[4] = { 0x00, 0x00, 0x00, 0x01 };
+    for(unsigned int i = 0; i < num; ++i)
+    {
+      std::cerr << "xulong1 dummysink sps size" << sps[i].sPropLength << std::endl;
+      if(sps[i].sPropLength <= 0)
+        continue;
+      fwrite(start_code, 4, 1, raw_es_writer_);
+      fwrite(sps[i].sPropBytes, sps[i].sPropLength, 1, raw_es_writer_);
+      received_sps_pps_ = true;
+    }
+    delete[] sps;
+  }
+
+  //if(received_sps_pps_)
+  {
+	  char *pbuf = (char *)fReceiveBuffer;
+	  char head[4] = { 0x00, 0x00, 0x00, 0x01 };
+
+    std::string index = std::to_string(frame_counter_++);
+    std::string file_name = "ganz." + index + ".h264";
+	  FILE *fp = fopen(file_name.c_str(), "wb");
+	  if (fp)
+	  {
+		  //fwrite(head, 4, 1, fp);
+		  fwrite(fReceiveBuffer, frameSize, 1, fp);
+		  fclose(fp);
+		  fp = NULL;
+	  }
+  }
+
 #ifdef DEBUG_PRINT_EACH_RECEIVED_FRAME
   if (fStreamId != NULL) envir() << "Stream \"" << fStreamId << "\"; ";
   envir() << fSubsession.mediumName() << "/" << fSubsession.codecName() << ":\tReceived " << frameSize << " bytes";

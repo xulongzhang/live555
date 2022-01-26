@@ -36,6 +36,7 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 #endif
 #endif
 
+#include <string>
 class RTSPClient: public Medium {
 public:
   static RTSPClient* createNew(UsageEnvironment& env, char const* rtspURL,
@@ -334,6 +335,7 @@ private:
   unsigned fUserAgentHeaderStrLen;
   int fInputSocketNum, fOutputSocketNum;
   char* fBaseURL;
+  std::string play_base_url;
   unsigned char fTCPStreamIdCount; // used for (optional) RTP/TCP
   char* fLastSessionId;
   unsigned fSessionTimeoutParameter; // optionally set in response "Session:" headers
