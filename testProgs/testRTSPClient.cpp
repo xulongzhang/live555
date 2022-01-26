@@ -491,7 +491,7 @@ DummySink::DummySink(UsageEnvironment& env, MediaSubsession& subsession, char co
     fSubsession(subsession) {
   fStreamId = strDup(streamId);
   fReceiveBuffer = new u_int8_t[DUMMY_SINK_RECEIVE_BUFFER_SIZE];
-  raw_es_writer_ = fopen("ganz.h264", "wb");
+  raw_es_writer_ = fopen("hack_ganz/a_ganz.h264", "wb");
 }
 
 DummySink::~DummySink() {
@@ -539,8 +539,11 @@ void DummySink::afterGettingFrame(unsigned frameSize, unsigned numTruncatedBytes
 	  char *pbuf = (char *)fReceiveBuffer;
 	  char head[4] = { 0x00, 0x00, 0x00, 0x01 };
 
+    fwrite(head, 4, 1, raw_es_writer_);
+    fwrite(fReceiveBuffer, frameSize, 1, raw_es_writer_);    
+
     std::string index = std::to_string(frame_counter_++);
-    std::string file_name = "ganz." + index + ".h264";
+    std::string file_name = "hack_ganz/ganz." + index + ".h264";
 	  FILE *fp = fopen(file_name.c_str(), "wb");
 	  if (fp)
 	  {
