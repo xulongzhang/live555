@@ -510,49 +510,138 @@ void DummySink::afterGettingFrame(void* clientData, unsigned frameSize, unsigned
 // If you don't want to see debugging output for each received frame, then comment out the following line:
 #define DEBUG_PRINT_EACH_RECEIVED_FRAME 1
 
+static const struct IMM5_unit
+{
+    uint8_t bits[14];
+    uint8_t len;
+} IMM5_units[14] = {
+    {{0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x80, 0x1E, 0xF4, 0x0B, 0x0F, 0x88}, 12},
+    {{0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x80, 0x1E, 0xF4, 0x05, 0x83, 0xE2}, 12},
+    {{0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x80, 0x1E, 0xF4, 0x05, 0x81, 0xE8, 0x80}, 13},
+    {{0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x80, 0x1E, 0xF4, 0x0B, 0x04, 0xA2}, 12},
+    {{0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x80, 0x1E, 0xF4, 0x05, 0x81, 0x28, 0x80}, 13},
+    {{0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x80, 0x1E, 0xF4, 0x05, 0x80, 0x92, 0x20}, 13},
+    {{0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x00, 0x1E, 0x9A, 0x74, 0x0B, 0x0F, 0xC8}, 13},
+    {{0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x00, 0x1E, 0x9A, 0x74, 0x05, 0x83, 0xF2}, 13},
+    {{0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x00, 0x1E, 0x9A, 0x74, 0x05, 0x81, 0xEC, 0x80}, 14},
+    {{0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x00, 0x1E, 0x9A, 0x74, 0x0B, 0x04, 0xB2}, 13},
+    {{0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x00, 0x1E, 0x9A, 0x74, 0x05, 0x81, 0x2C, 0x80}, 14},
+    {{0x00, 0x00, 0x00, 0x01, 0x67, 0x42, 0x00, 0x1E, 0x9A, 0x74, 0x05, 0x80, 0x93, 0x20}, 14},
+    {{0x00, 0x00, 0x00, 0x01, 0x68, 0xDE, 0x3C, 0x80}, 8},
+    {{0x00, 0x00, 0x00, 0x01, 0x68, 0xCE, 0x32, 0x28}, 8},
+};
+
+#define AV_RL32(x)                                                                                                     \
+    (((uint32_t)((const uint8_t *)(x))[3] << 24) | (((const uint8_t *)(x))[2] << 16) |                                 \
+     (((const uint8_t *)(x))[1] << 8) | ((const uint8_t *)(x))[0])
+
+static void convert_imm5_to_annexb(uint8_t*& in_data, int& in_size)
+{
+    if (in_size > 24 && in_data[8] <= 1 && AV_RL32(in_data + 4) + 24ULL <= in_size)
+    {
+        int codec_type = in_data[1];
+        int index = in_data[10];
+        int new_size = AV_RL32(in_data + 4);
+        int offset, off;
+
+        if (codec_type == 0xA)
+        {
+            // NOT support HEVC now
+            return;
+        }
+        else if (index == 17)
+        {
+            index = 4;
+        }
+        else if (index == 18)
+        {
+            index = 5;
+        }
+
+        if (index >= 1 && index <= 12)
+        {
+            index -= 1;
+            off = offset = IMM5_units[index].len;
+            if (codec_type == 2)
+            {
+                offset += IMM5_units[12].len;
+            }
+            else
+            {
+                offset += IMM5_units[13].len;
+            }
+
+            in_data += 24 - offset;
+            in_size = new_size + offset;
+
+            memcpy(in_data, IMM5_units[index].bits, IMM5_units[index].len);
+            if (codec_type == 2)
+            {
+                memcpy(in_data + off, IMM5_units[12].bits, IMM5_units[12].len);
+            }
+            else
+            {
+                memcpy(in_data + off, IMM5_units[13].bits, IMM5_units[13].len);
+            }
+        }
+        else
+        {
+            in_data += 24;
+            in_size -= 24;
+        }
+    }
+}
+
 void DummySink::afterGettingFrame(unsigned frameSize, unsigned numTruncatedBytes,
 				  struct timeval presentationTime, unsigned /*durationInMicroseconds*/) {
   // We've just received a frame of data.  (Optionally) print out information about it:
 
-  if (received_sps_pps_ == false)
-  {
-    std::cerr << "xulong1 dummysink first frame" << std::endl;
-    unsigned int num = 2;
-    SPropRecord *sps = parseSPropParameterSets(fSubsession.fmtp_spropparametersets(), num);
+  // if (received_sps_pps_ == false)
+  // {
+  //   std::cerr << "xulong1 dummysink first frame" << std::endl;
+  //   unsigned int num = 2;
+  //   SPropRecord *sps = parseSPropParameterSets(fSubsession.fmtp_spropparametersets(), num);
 
-    // For H.264 video stream, we use a special sink that insert start_codes:
-    unsigned char start_code[4] = { 0x00, 0x00, 0x00, 0x01 };
-    for(unsigned int i = 0; i < num; ++i)
-    {
-      std::cerr << "xulong1 dummysink sps size" << sps[i].sPropLength << std::endl;
-      if(sps[i].sPropLength <= 0)
-        continue;
-      fwrite(start_code, 4, 1, raw_es_writer_);
-      fwrite(sps[i].sPropBytes, sps[i].sPropLength, 1, raw_es_writer_);
-      received_sps_pps_ = true;
-    }
-    delete[] sps;
-  }
+  //   // For H.264 video stream, we use a special sink that insert start_codes:
+  //   unsigned char start_code[4] = { 0x00, 0x00, 0x00, 0x01 };
+  //   for(unsigned int i = 0; i < num; ++i)
+  //   {
+  //     std::cerr << "xulong1 dummysink sps size" << sps[i].sPropLength << std::endl;
+  //     if(sps[i].sPropLength <= 0)
+  //       continue;
+  //     fwrite(start_code, 4, 1, raw_es_writer_);
+  //     fwrite(sps[i].sPropBytes, sps[i].sPropLength, 1, raw_es_writer_);
+  //     received_sps_pps_ = true;
+  //   }
+  //   delete[] sps;
+  // }
 
   //if(received_sps_pps_)
-  {
-	  char *pbuf = (char *)fReceiveBuffer;
-	  char head[4] = { 0x00, 0x00, 0x00, 0x01 };
+  // {
+	//   char *pbuf = (char *)fReceiveBuffer;
+	//   char head[4] = { 0x00, 0x00, 0x00, 0x01 };
 
-    fwrite(head, 4, 1, raw_es_writer_);
-    fwrite(fReceiveBuffer, frameSize, 1, raw_es_writer_);    
+  //   fwrite(head, 4, 1, raw_es_writer_);
+  //   fwrite(fReceiveBuffer, frameSize, 1, raw_es_writer_);    
 
-    std::string index = std::to_string(frame_counter_++);
-    std::string file_name = "hack_ganz/ganz." + index + ".h264";
-	  FILE *fp = fopen(file_name.c_str(), "wb");
-	  if (fp)
-	  {
-		  //fwrite(head, 4, 1, fp);
-		  fwrite(fReceiveBuffer, frameSize, 1, fp);
-		  fclose(fp);
-		  fp = NULL;
-	  }
-  }
+  //   std::string index = std::to_string(frame_counter_++);
+  //   std::string file_name = "hack_ganz/ganz." + index + ".h264";
+	//   FILE *fp = fopen(file_name.c_str(), "wb");
+	//   if (fp)
+	//   {
+	// 	  //fwrite(head, 4, 1, fp);
+	// 	  fwrite(fReceiveBuffer, frameSize, 1, fp);
+	// 	  fclose(fp);
+	// 	  fp = NULL;
+	//   }
+  // }
+
+  // save Ganz DVR IMM5
+  uint8_t* data = fReceiveBuffer;
+  int size = frameSize;
+  convert_imm5_to_annexb(data, size);
+
+  fwrite(data, size, 1, raw_es_writer_);
 
 #ifdef DEBUG_PRINT_EACH_RECEIVED_FRAME
   if (fStreamId != NULL) envir() << "Stream \"" << fStreamId << "\"; ";

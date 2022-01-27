@@ -1,1 +1,65 @@
 .DS_Store
+
+# Prerequisites
+*.d
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+# Precompiled Headers
+*.gch
+*.pch
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+# Fortran module files
+*.mod
+*.smod
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+# Executables
+*.exe
+*.out
+*.app
+Makefile
+*.h264
+*.log
+.vscode
+
+proxyServer/live555ProxyServer
+mediaServer/live555MediaServer
+testProgs/testMKVStreamer
+testProgs/testDVVideoStreamer
+testProgs/vobStreamer
+testProgs/testMPEG1or2VideoReceiver
+testProgs/testH265VideoStreamer
+testProgs/testH264VideoToTransportStream
+testProgs/registerRTSPStream
+testProgs/testMPEG2TransportStreamTrickPlay
+testProgs/testMP3Receiver
+testProgs/testMPEG1or2ProgramToTransportStream
+testProgs/testOggStreamer
+testProgs/testH264VideoStreamer
+testProgs/testAMRAudioStreamer
+testProgs/testH265VideoToTransportStream
+testProgs/testMPEG1or2Splitter
+testProgs/sapWatch
+testProgs/MPEG2TransportStreamIndexer
+testProgs/testMPEG2TransportReceiver
+testProgs/testRTSPClient
+testProgs/testMPEG4VideoStreamer
+testProgs/testOnDemandRTSPServer
+testProgs/testWAVAudioStreamer
+testProgs/openRTSP
+testProgs/testMP3Streamer
+testProgs/testMPEG1or2VideoStreamer
+testProgs/testRelay
+testProgs/testReplicator
+testProgs/playSIP
+testProgs/testMPEG2TransportStreamer
+testProgs/testMPEG1or2AudioVideoStreamer
