@@ -358,7 +358,7 @@ RTSPClient::RTSPClient(UsageEnvironment& env, char const* rtspURL,
 		       int verbosityLevel, char const* applicationName,
 		       portNumBits tunnelOverHTTPPortNum, int socketNumToServer)
   : Medium(env),
-    desiredMaxIncomingPacketSize(0), fVerbosityLevel(verbosityLevel), fCSeq(1),
+    desiredMaxIncomingPacketSize(0), fVerbosityLevel(verbosityLevel), fCSeq(9),
     fAllowBasicAuthentication(True), fServerAddress(0),
     fTunnelOverHTTPPortNum(tunnelOverHTTPPortNum),
     fUserAgentHeaderStr(NULL), fUserAgentHeaderStrLen(0),
@@ -378,7 +378,7 @@ RTSPClient::RTSPClient(UsageEnvironment& env, char const* rtspURL,
   }
 
   // Set the "User-Agent:" header to use in each request:
-  char const* const libName = "LIVE555 Streaming Media v";
+  char const* const libName = "ITX Security ";
   char const* const libVersionStr = LIVEMEDIA_LIBRARY_VERSION_STRING;
   char const* libPrefix; char const* libSuffix;
   if (applicationName == NULL || applicationName[0] == '\0') {
@@ -391,7 +391,7 @@ RTSPClient::RTSPClient(UsageEnvironment& env, char const* rtspURL,
     = strlen(applicationName) + strlen(libPrefix) + strlen(libName) + strlen(libVersionStr) + strlen(libSuffix) + 1;
   char* userAgentName = new char[userAgentNameSize];
   sprintf(userAgentName, "%s%s%s%s%s", applicationName, libPrefix, libName, libVersionStr, libSuffix);
-  setUserAgentString(userAgentName);
+  setUserAgentString(libName);
   delete[] userAgentName;
 }
 
@@ -482,7 +482,8 @@ unsigned RTSPClient::sendRequest(RequestRecord* request) {
     {
       std::cerr << "xulong1 PLAY" << std::endl;
       std::string base_url(fBaseURL);
-      base_url += "?Live_video_channel_mask=0x0000ffff&Live_audio_channel_mask=0x00000001&Live_iframe_only=0&Live_stream_index=0/";
+      //base_url += "?Pb_video_channel_mask=0x00000001&Pb_audio_channel_mask=0x00000000&Pb_start_time=1643608612&Pb_end_time=0&Pb_direction=Forward&Pb_speed=1&Pb_is_start_end=0&Live_iframe_only=0&Live_stream_index=0";
+      base_url += "?Live_video_channel_mask=0x00000001&Live_audio_channel_mask=0x00000000&Live_iframe_only=0&Live_stream_index=0/";
       play_base_url = base_url;
       cmdURL = const_cast<char*>(play_base_url.c_str());
     }
@@ -652,6 +653,11 @@ Boolean RTSPClient::setRequestFields(RequestRecord* request,
 				     char*& extraHeaders, Boolean& extraHeadersWereAllocated
 				     ) {
   // Set various fields that will appear in our outgoing request, depending upon the particular command that we are sending.
+
+  if(strcmp(request->commandName(), "GET_PARAMETER") == 0)
+  {
+    return True;
+  }
 
   if (strcmp(request->commandName(), "DESCRIBE") == 0) {
     extraHeaders = (char*)"Accept: application/sdp\r\n";
@@ -1338,7 +1344,7 @@ Boolean RTSPClient::handleGET_PARAMETERResponse(char const* parameterName, char*
 
   // An error occurred:
   envir().setResultMsg("Bad \"GET_PARAMETER\" response");
-  return False;
+  return True;
 }
 
 Boolean RTSPClient::handleAuthenticationFailure(char const* paramsStr) {

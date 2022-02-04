@@ -68,6 +68,13 @@ Boolean H264VideoRTPSource
   unsigned char* headerStart = packet->data();
   unsigned packetSize = packet->dataSize();
   unsigned numBytesToSkip;
+  
+  // NO FUs in the stream from Ganz
+  if(packet)
+  {
+    resultSpecialHeaderSize = 0;
+    return True;
+  }
 
   // Check the 'nal_unit_type' for special 'aggregation' or 'fragmentation' packets:
   if (packetSize < 1) return False;

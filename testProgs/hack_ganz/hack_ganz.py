@@ -31,6 +31,8 @@ while i <= 48:
 # ./testRTSPClient rtsp://service:tpain@192.168.202.81/rtsp_tunnel?h26x=4&line=1&inst=1
 
 
-# Ganz DVR box
+# Drew's Ganz DVR box
 # ./testRTSPClient rtsp://TEST:1234@192.168.203.147/live
 
+# Xulong's Ganz box
+# ./testRTSPClient rtsp://TEST:1234@192.168.204.153/live

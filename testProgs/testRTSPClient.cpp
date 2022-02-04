@@ -27,7 +27,9 @@ along with this library; if not, write to the Free Software Foundation, Inc.,
 // Forward function definitions:
 
 // RTSP 'response handlers':
+void continueAfterOPTIONS(RTSPClient* rtspClient, int resultCode, char* resultString);
 void continueAfterDESCRIBE(RTSPClient* rtspClient, int resultCode, char* resultString);
+void continueAfterGETPARAMETER(RTSPClient* rtspClient, int resultCode, char* resultString);
 void continueAfterSETUP(RTSPClient* rtspClient, int resultCode, char* resultString);
 void continueAfterPLAY(RTSPClient* rtspClient, int resultCode, char* resultString);
 
@@ -159,7 +161,22 @@ private:
   // redefined virtual functions:
   virtual Boolean continuePlaying();
 
+  void write_to_file_(const std::string& file_name, uint8_t const* const data, int size)
+  {
+	  FILE *fp = fopen(file_name.c_str(), "wb");
+	  if (fp)
+	  {
+		  fwrite(data, size, 1, fp);
+		  fclose(fp);
+		  fp = NULL;
+	  }
+  }
+
 private:
+  u_int8_t* cached_buffer_{nullptr};
+  int       cached_index_{0};
+  struct timeval cached_ts{0, 0};
+
   u_int8_t* fReceiveBuffer;
   MediaSubsession& fSubsession;
   char* fStreamId;
@@ -186,11 +203,35 @@ void openURL(UsageEnvironment& env, char const* progName, char const* rtspURL) {
   // Next, send a RTSP "DESCRIBE" command, to get a SDP description for the stream.
   // Note that this command - like all RTSP commands - is sent asynchronously; we do not block, waiting for a response.
   // Instead, the following function call returns immediately, and we handle the RTSP response later, from within the event loop:
-  rtspClient->sendDescribeCommand(continueAfterDESCRIBE); 
+  rtspClient->sendOptionsCommand(continueAfterOPTIONS); 
 }
 
 
 // Implementation of the RTSP 'response handlers':
+
+void continueAfterOPTIONS(RTSPClient* rtspClient, int resultCode, char* resultString)
+{
+  do {
+    UsageEnvironment& env = rtspClient->envir(); // alias
+    StreamClientState& scs = ((ourRTSPClient*)rtspClient)->scs; // alias
+
+    if (resultCode != 0) {
+      env << *rtspClient << "Failed to get a OPTIONS SDP description: " << resultString << "\n";
+      delete[] resultString;
+      break;
+    }
+
+    char* const sdpDescription = resultString;
+    env << *rtspClient << "Got a OPTIONS SDP description:\n" << sdpDescription << "\n";
+
+    rtspClient->sendDescribeCommand(continueAfterDESCRIBE); 
+
+    return;
+  } while (0);
+
+  // An unrecoverable error occurred with this stream.
+  shutdownStream(rtspClient);  
+}
 
 void continueAfterDESCRIBE(RTSPClient* rtspClient, int resultCode, char* resultString) {
   do {
@@ -198,13 +239,13 @@ void continueAfterDESCRIBE(RTSPClient* rtspClient, int resultCode, char* resultS
     StreamClientState& scs = ((ourRTSPClient*)rtspClient)->scs; // alias
 
     if (resultCode != 0) {
-      env << *rtspClient << "Failed to get a SDP description: " << resultString << "\n";
+      env << *rtspClient << "Failed to get a DESCRIBE SDP description: " << resultString << "\n";
       delete[] resultString;
       break;
     }
 
     char* const sdpDescription = resultString;
-    env << *rtspClient << "Got a SDP description:\n" << sdpDescription << "\n";
+    env << *rtspClient << "Got a GETPARAMETER SDP description:\n" << sdpDescription << "\n";
 
     // Create a media session object from this SDP description:
     scs.session = MediaSession::createNew(env, sdpDescription);
@@ -221,6 +262,35 @@ void continueAfterDESCRIBE(RTSPClient* rtspClient, int resultCode, char* resultS
     // calling "MediaSubsession::initiate()", and then sending a RTSP "SETUP" command, on each one.
     // (Each 'subsession' will have its own data source.)
     scs.iter = new MediaSubsessionIterator(*scs.session);
+
+    char const * const para = "time_zone: \r\ndst_onoff: ";
+    rtspClient->sendGetParameterCommand(*scs.session, continueAfterGETPARAMETER, para);
+    return;
+  } while (0);
+
+  // An unrecoverable error occurred with this stream.
+  shutdownStream(rtspClient);
+}
+
+void continueAfterGETPARAMETER(RTSPClient* rtspClient, int resultCode, char* resultString)
+{
+  do {
+    UsageEnvironment& env = rtspClient->envir(); // alias
+    StreamClientState& scs = ((ourRTSPClient*)rtspClient)->scs; // alias
+
+    if (resultCode != 0) {
+      env << *rtspClient << "Failed to get a GETPARAMETER SDP description: " << resultString << "\n";
+      delete[] resultString;
+      break;
+    }
+
+    char* const sdpDescription = resultString;
+    env << *rtspClient << "Got a GETPARAMETER SDP description:\n" << sdpDescription << "\n";
+
+    // Then, create and set up our data source objects for the session.  We do this by iterating over the session's 'subsessions',
+    // calling "MediaSubsession::initiate()", and then sending a RTSP "SETUP" command, on each one.
+    // (Each 'subsession' will have its own data source.)
+    
     setupNextSubsession(rtspClient);
     return;
   } while (0);
@@ -491,6 +561,7 @@ DummySink::DummySink(UsageEnvironment& env, MediaSubsession& subsession, char co
     fSubsession(subsession) {
   fStreamId = strDup(streamId);
   fReceiveBuffer = new u_int8_t[DUMMY_SINK_RECEIVE_BUFFER_SIZE];
+  cached_buffer_ = new u_int8_t[DUMMY_SINK_RECEIVE_BUFFER_SIZE];
   raw_es_writer_ = fopen("hack_ganz/a_ganz.h264", "wb");
 }
 
@@ -623,7 +694,9 @@ void DummySink::afterGettingFrame(unsigned frameSize, unsigned numTruncatedBytes
 
   //   fwrite(head, 4, 1, raw_es_writer_);
   //   fwrite(fReceiveBuffer, frameSize, 1, raw_es_writer_);    
-
+ 
+  // if(fReceiveBuffer[0] == 0)
+  // {
   //   std::string index = std::to_string(frame_counter_++);
   //   std::string file_name = "hack_ganz/ganz." + index + ".h264";
 	//   FILE *fp = fopen(file_name.c_str(), "wb");
@@ -636,13 +709,50 @@ void DummySink::afterGettingFrame(unsigned frameSize, unsigned numTruncatedBytes
 	//   }
   // }
 
+  // }
+
   // save Ganz DVR IMM5
-  uint8_t* data = fReceiveBuffer;
-  int size = frameSize;
-  convert_imm5_to_annexb(data, size);
+  {
+    if(presentationTime.tv_sec != cached_ts.tv_sec || presentationTime.tv_usec != cached_ts.tv_usec)
+    {
+      envir() << "xulong, write " << cached_index_ << " bytes.\n";
+      uint8_t* data = cached_buffer_;
+      int size = cached_index_;
 
-  fwrite(data, size, 1, raw_es_writer_);
+      const std::string index = std::to_string(frame_counter_++);
+      const std::string file_name = "hack_ganz/ganz." + index;
 
+      const std::string file_name_avc = file_name + ".h264";
+      const std::string file_name_raw = file_name + ".raw";
+
+      //write_to_file_(file_name_avc, data, size);
+      convert_imm5_to_annexb(data, size);
+      //write_to_file_(file_name_raw, data, size);
+      
+      fwrite(data, size, 1, raw_es_writer_);
+
+      cached_index_ = 0;
+    }
+
+    {
+      cached_ts.tv_sec = presentationTime.tv_sec;
+      cached_ts.tv_usec = presentationTime.tv_usec;
+      
+      memcpy(cached_buffer_ + cached_index_, fReceiveBuffer, frameSize);
+      cached_index_ += frameSize;
+      if(cached_index_ > DUMMY_SINK_RECEIVE_BUFFER_SIZE)
+      {
+        exit(1);
+      }
+    }
+  }
+  // if(fReceiveBuffer[0] == 0)
+  // {
+  //   uint8_t* data = fReceiveBuffer;
+  //   int size = frameSize;
+  //   convert_imm5_to_annexb(data, size);
+  //   fwrite(data, size, 1, raw_es_writer_);
+  // }
 #ifdef DEBUG_PRINT_EACH_RECEIVED_FRAME
   if (fStreamId != NULL) envir() << "Stream \"" << fStreamId << "\"; ";
   envir() << fSubsession.mediumName() << "/" << fSubsession.codecName() << ":\tReceived " << frameSize << " bytes";
